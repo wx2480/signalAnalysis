@@ -106,5 +106,3 @@ class ReportFig(Fig):
             fig.savefig(write_path + 'ic_test.jpg')
         else:
             plt.show(fig)
-
-        

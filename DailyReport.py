@@ -35,7 +35,10 @@ class DailyReport:
     def preprocessing(self):
         self.ret = self.LoadData.get_return()
         self.factor[self.factor_name] = self.get_factor_data()
-
+    
+    def distribute(self):
+        pass
+        
     def group_test(self, n = 5):
         def f(x):
             if self.trading_settlement == 'close_to_close':
