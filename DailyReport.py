@@ -37,8 +37,10 @@ class DailyReport:
         self.factor[self.factor_name] = self.get_factor_data()
     
     def distribute(self):
-        pass
-        
+        _ = self.factor[self.factor_name]['values']
+        self.ReportFig.factorDistribute(_, self.write_path + self.factor_name + r'/')
+
+
     def group_test(self, n = 5):
         def f(x):
             if self.trading_settlement == 'close_to_close':
@@ -110,6 +112,11 @@ class DailyReport:
         ic_values = allData.groupby('date').apply(f)
         ic_values = ic_values.sort_index()
         ic_values.index = ic_values.index.map(str)
+
+        if os.path.exists(self.write_path + self.factor_name + r'/'):
+            pass
+        else:
+            os.mkdir(self.write_path + self.factor_name + r'/')
         
         self.ReportFig.icFig(ic_values, self.write_path + self.factor_name + r'/')
         return ic_values
@@ -129,14 +136,14 @@ class DailyReport:
 start = 20150106
 end = 20200801
 factor_path = r'/home/xiaonan/factor_wxn/factor/'
-factor_name = 'price_vol_corr'
+factor_name = 'market_depth_amount'
 write_path = r'/home/xiaonan/factor_wxn/SignalAnalysis/Report/'
 A = DailyReport(start, end, factor_path, factor_name, write_path, delay = 0)
 
 A.preprocessing()
-print('adsfdsag')
+A.distribute()
 # ret = A.group_test()
-res = A.ic_test()
+# res = A.ic_test()
 
 
 

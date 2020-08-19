@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 
 from tqdm import tqdm
@@ -64,10 +65,10 @@ class Fig:
         fig, ax = plt.subplots()
 
         for i,label in enumerate(data.columns):
-            ax.plot(data.iloc[:,i], color = self.colors[i], label = label)
+            ax.plot(data.iloc[:,i], color = self.colors[i], label = label, **kwargs)
 
         for i in ['top', 'bottom', 'left', 'right']:
-                ax.spines[i].set_visible(True)
+            ax.spines[i].set_visible(True)
         ax.yaxis.grid(linestyle='--',alpha = 0.3)
 
         for j,tick in enumerate(ax.get_xticklabels()):
@@ -84,6 +85,16 @@ class Fig:
                 tick.set_visible(False)
         ax.legend(loc = 'upper left')
         return fig, ax
+    
+    def distribute(self, data):
+        fig, ax = plt.subplots()
+        sns.distplot(data.values, color = self.colors[0], ax = ax)
+        for i in ['top', 'bottom', 'left', 'right']:
+            ax.spines[i].set_visible(True)
+        ax.yaxis.grid(linestyle='--',alpha = 0.3)
+        return fig, ax
+
+
 
 class ReportFig(Fig):
     def __init__(self):
@@ -99,10 +110,20 @@ class ReportFig(Fig):
             plt.show(fig)
 
     def icFig(self, data, write_path = None):
-        fig, ax = self.plot(data,accumulate=True)
+        fig, ax = self.plot(data, accumulate=True)
         factor_name = write_path.split(r'/')[-2]
         ax.set_title(factor_name)
         if write_path:
             fig.savefig(write_path + 'ic_test.jpg')
         else:
             plt.show(fig)
+    
+    def factorDistribute(self,data, write_path = None):
+        fig, ax = self.distribute(data)
+        factor_name = write_path.split(r'/')[-2]
+        ax.set_title(factor_name)
+        if write_path:
+            fig.savefig(write_path + 'Distribute.jpg')
+        else:
+            plt.show(fig)
+            
