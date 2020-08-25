@@ -110,7 +110,7 @@ class ReportFig(Fig):
             plt.show(fig)
 
     def icFig(self, data, write_path = None):
-        fig, ax = self.plot(data, accumulate=True)
+        fig, ax = self.plot(data)
         factor_name = write_path.split(r'/')[-2]
         ax.set_title(factor_name)
         if write_path:
