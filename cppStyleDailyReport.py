@@ -1,4 +1,4 @@
-from _utils import LoadData, ReportFig
+from _utils import LoadData, ReportFig, CalRatio
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -12,11 +12,6 @@ import trading_date as ts
 
 # data will use zhaorui's function.
 
-class Test:
-    def group_test(x, y):
-        pass
-
-
 class DailyReport:
     # def __init__(self, start, end, factor_path, factor_name, write_path, trading_settlement = 'close_to_close', delay=0, day=1):
     def __init__(self, factor_path, write_path):
@@ -27,6 +22,7 @@ class DailyReport:
 
         self.LoadData = LoadData(factor_path)
         self.ReportFig = ReportFig()
+        self.CRatio = CalRatio(0.03)
 
         self.factor = {}
         
@@ -44,7 +40,7 @@ class DailyReport:
         self.ReportFig.factorDistribute(_, self.write_path + factor_name + r'/')
 
     
-    def group_test(self, start, end, factor_name, n = 5, trading_settlement = 'close2close', delay = 0, day = 1):
+    def group_test(self, start, end, factor_name, n = 5, trading_settlement = 'close2close', delay = 0, day = 1, plot = True):
         self.preprocessing(start, end, factor_name, delay)
 
         _factor = self.factor[factor_name].copy()
@@ -102,9 +98,10 @@ class DailyReport:
         group = {}
         for i in range(n):
             group[str(i)] = locals()['group_{}'.format(i)]
-        _ = ((pd.DataFrame(group, index = list(map(str, timeline))) + 1) * 0.997).cumprod()
+        _ = ((pd.DataFrame(group, index = list(map(str, timeline))) + 1) * 0.995).cumprod()
         pd.DataFrame(group, index = list(map(str, timeline))).to_csv('group.csv')
-        self.ReportFig.groupFig(_.apply(lambda x:x - x.mean(), axis = 1), self.write_path + factor_name + r'/')
+        if plot:
+            self.ReportFig.groupFig(_.apply(lambda x:x - x.mean(), axis = 1), self.write_path + factor_name + r'/')
 
         return group
 
@@ -187,24 +184,75 @@ class DailyReport:
         return ic
         
     def ratio(self, start, end, factor_name, freq = '2M', trading_settlement = 'close2close', delay = 0, day = 1):
-        group = self.group_test(start, end, factor_name, trading_settlement = 'close2close', delay = 0, day = 1)
-        longshort = np.cumprod(np.array(group['0']) * 0.997 + 0.997) - np.cumprod(np.array(group['4']) * 0.997 + 0.997)
-        timeline = ts.get_trading_date(start, end)
-        time_split = []
-        start_point = str(timeline[0])
-        print(start_point)
-        print(start_point[4:6])
-        for i in timeline:
-            pass
-        # fig, ax = self.ReportFig.plot(pd.DataFrame(longshort, index = list(map(str, timeline))))
-        # plt.show(fig)
+        fre = int(freq[:-1])
+        fee = 0.997
+        group = self.group_test(start, end, factor_name, trading_settlement = 'close2close', delay = 0, day = 1, plot = False)
+
+        l = np.cumprod(np.array(group['0']) * fee + fee)
+        s = np.cumprod(np.array(group['4']) * fee + fee)
         
+        longshort = np.cumprod((1 - np.array(group['4']) + np.array(group['0'])) * fee)
+
+        timeline = ts.get_trading_date(start, end)
+        timeline = np.array(timeline)
+        time_split = [timeline[0]]
+
+        while(time_split[-1] <= timeline[-1]):
+            Y,a = divmod(time_split[-1], 10000)
+            M,D = divmod(a, 100)
+            time_split.append(10000 * (Y+(M + fre)//12) + 100 * ((M + fre)%12) + D)
+        
+        ans = {
+            'DateRange':{},
+            'TradingDays':{},
+            'ReturnRatio':{},
+            'LongReturnRatio':{},
+            'ShortReturnRatio':{},
+            'SharpeRatio':{},
+            'WinRatio':{},
+            'ProfitCrossRatio':{},
+            'MaxDrawdown':{},
+            'CalmarRatio':{},
+        }
+        for i in range(len(time_split)-1):
+            lay = (timeline >= time_split[i]) & (timeline < time_split[i+1])
+            time = timeline[lay]
+            data = longshort[lay]
+            longdata = l[lay]
+            shortdata = s[lay]
+
+            ans['DateRange'][i] = '{}~{}'.format(time_split[i], time_split[i+1])
+            ans['TradingDays'][i] = self.CRatio.dateRange(time)
+            ans['ReturnRatio'][i],ans['LongReturnRatio'][i], ans['ShortReturnRatio'][i] = self.CRatio.allRet(time,data,longdata,shortdata)
+            ans['SharpeRatio'][i] = self.CRatio.sharpe(time,data)
+            ans['WinRatio'][i] = self.CRatio.win_ratio(time,data)
+            ans['ProfitCrossRatio'][i] = self.CRatio.pcr(time,data)
+            ans['MaxDrawdown'][i] = self.CRatio.maxdrawdown(time,data)
+            ans['CalmarRatio'][i] = self.CRatio.calmar(time,data)
+        
+        '''
+        print dataframe
+        x = 19
+        for i in pd.DataFrame(ans).columns:
+            print(i + (x+1 - len(i)) * ' ' + '|', end = '')
+        print('')
+        for i,j in pd.DataFrame(ans).iterrows():
+            for k in j.index:
+                if isinstance(j[k], str):
+                    res = j[k]
+                else:
+                    res = str(np.round(j[k],4))
+                print(res, (x - len(res)) * ' ' + '|', end = '')
+            print('')
+        '''
+        pd.DataFrame(ans).to_csv(self.write_path + factor_name + r'/ratio.csv', index=None)
     
 if __name__ == '__main__':
     start = 20150106
     end = 20200801
     factor_path = r'/home/xiaonan/factor_wxn/factor/'
     factor_name = 'price_vol_corr'
+    # factor_name = 'market_depth_amount'
     write_path = r'/home/xiaonan/factor_wxn/SignalAnalysis/Report/'
     A = DailyReport(factor_path, write_path)
     A.ratio(start,end,factor_name)

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
 
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -93,6 +94,64 @@ class Fig:
             ax.spines[i].set_visible(True)
         ax.yaxis.grid(linestyle='--',alpha = 0.3)
         return fig, ax
+
+
+class CalRatio:
+    def __init__(self,r):
+        self.r = r
+
+    def sharpe(self,time,data):
+        t = len(time)
+        ret = np.power((data[-1]/data[0]), 256 / t) - 1
+        sigma = np.std(np.diff(np.log(data))) * np.sqrt(256)
+        return (ret - self.r) / sigma
+
+    def allRet(self,time,data,longdata,shortdata):
+        """
+        ret,longret,shortret
+        """
+        t = len(time)
+        ret = np.power((data[-1]/data[0]), 256 / t) - 1
+        longret = np.power((longdata[-1]/longdata[0]), 256 / t) - 1
+        shortret = np.power((shortdata[-1]/shortdata[0]), 256 / t) - 1
+        return ret,longret,shortret
+
+    def win_ratio(self,time,data):
+        t = len(time) - 1
+        data = np.log(data)
+        win_ratio = np.sum(np.diff(data) > 0)/t
+        return win_ratio
+
+    def pcr(self,time,data):
+        if isinstance(data, list):
+            data = np.array(data)
+        data = np.diff(data)
+        a = data[data>0]
+        b = data[data<0]
+        return - np.sum(a) / np.sum(b) * len(b) / len(a)
+    
+    def maxdrawdown(self,time,data):
+        maxdrawdown = 0
+        maxport = data[0]
+        pre = data[0]
+        for i in data:
+            if i >= pre:
+                maxport = max(i, maxport)
+                pre = i
+                continue
+            drawdown = 1 - i/maxport
+            maxdrawdown = max(maxdrawdown,drawdown)
+            pre = i
+        return maxdrawdown
+            
+    def dateRange(self, time):
+        return len(time)
+
+    def calmar(self,time,data):
+        t = len(time)
+        maxdrawdown = self.maxdrawdown(time,data)
+        ret = np.power((data[-1]/data[0]), 256 / t) - 1
+        return ret / maxdrawdown
 
 
 
