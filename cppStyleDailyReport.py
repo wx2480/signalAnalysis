@@ -1,4 +1,5 @@
 from _utils import LoadData, ReportFig, CalRatio
+import ctypes
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -11,6 +12,20 @@ sys.path.append('/data/stock/newSystemData/feature_base/structure/yili/db_utilis
 import trading_date as ts
 
 # data will use zhaorui's function.
+
+def printDataFrame(data:pd.DataFrame):
+    width = 18
+    for i in data.columns:
+        print(i + (width+1 - len(i)) * ' ' + '|', end = '')
+    print('')
+    for i,j in data.iterrows():
+        for k in j.index:
+            if isinstance(j[k], str):
+                res = j[k]
+            else:
+                res = str(np.round(j[k],4))
+            print(res, (width - len(res)) * ' ' + '|', end = '')
+        print('')
 
 class DailyReport:
     # def __init__(self, start, end, factor_path, factor_name, write_path, trading_settlement = 'close_to_close', delay=0, day=1):
@@ -26,7 +41,6 @@ class DailyReport:
 
         self.factor = {}
         
-    
     def get_factor_data(self, start, end, factor_name, delay):
         return self.LoadData.get_factor(start, end, factor_name, delay)
 
@@ -98,10 +112,11 @@ class DailyReport:
         group = {}
         for i in range(n):
             group[str(i)] = locals()['group_{}'.format(i)]
-        _ = ((pd.DataFrame(group, index = list(map(str, timeline))) + 1) * 0.995).cumprod()
+        _ = ((pd.DataFrame(group, index = list(map(str, timeline))) + 1)).cumprod()
+        # _ = (pd.DataFrame(group, index = list(map(str, timeline)))).cumsum() + 1
         pd.DataFrame(group, index = list(map(str, timeline))).to_csv('group.csv')
         if plot:
-            self.ReportFig.groupFig(_.apply(lambda x:x - x.mean(), axis = 1), self.write_path + factor_name + r'/')
+            self.ReportFig.groupFig(_.apply(lambda x:x-x.mean(), axis = 1), self.write_path + factor_name + r'/')
 
         return group
 
@@ -183,15 +198,25 @@ class DailyReport:
         pd.DataFrame(ic, index = list(map(str,timeline))).to_csv('ic.csv')
         return ic
         
-    def ratio(self, start, end, factor_name, freq = '2M', trading_settlement = 'close2close', delay = 0, day = 1):
+    def ratio(self, start, end, factor_name, freq = '3M', trading_settlement = 'close2close', delay = 0, day = 1):
         fre = int(freq[:-1])
-        fee = 0.997
+        fee = 0.9995
         group = self.group_test(start, end, factor_name, trading_settlement = 'close2close', delay = 0, day = 1, plot = False)
 
-        l = np.cumprod(np.array(group['0']) * fee + fee)
-        s = np.cumprod(np.array(group['4']) * fee + fee)
+        l = np.cumsum(np.array(group['0'])) + 1
+        s = np.cumsum(np.array(group['4'])) + 1
+        longshort = np.cumsum(- np.array(group['4']) + np.array(group['0'])) + 1
+        '''
+        fig,ax = plt.subplots()
+        ax.plot(longshort, color = 'y')
+        ax.plot(l,color = 'b')
+        ax.plot(s,color = 'r')
+        plt.show(fig)
+        '''
+        # l = np.cumprod((np.array(group['0']) + 1) * fee)
+        # s = np.cumprod((np.array(group['0']) + 1) * fee)
         
-        longshort = np.cumprod((1 - np.array(group['4']) + np.array(group['0'])) * fee)
+        # longshort = np.cumprod((1 - np.array(group['4']) + np.array(group['0'])) * fee)
 
         timeline = ts.get_trading_date(start, end)
         timeline = np.array(timeline)
@@ -214,6 +239,7 @@ class DailyReport:
             'MaxDrawdown':{},
             'CalmarRatio':{},
         }
+
         for i in range(len(time_split)-1):
             lay = (timeline >= time_split[i]) & (timeline < time_split[i+1])
             time = timeline[lay]
@@ -230,9 +256,11 @@ class DailyReport:
             ans['MaxDrawdown'][i] = self.CRatio.maxdrawdown(time,data)
             ans['CalmarRatio'][i] = self.CRatio.calmar(time,data)
         
+        
+        # print dataframe
+        printDataFrame(pd.DataFrame(ans))
         '''
-        print dataframe
-        x = 19
+        x = 18
         for i in pd.DataFrame(ans).columns:
             print(i + (x+1 - len(i)) * ' ' + '|', end = '')
         print('')
@@ -244,18 +272,18 @@ class DailyReport:
                     res = str(np.round(j[k],4))
                 print(res, (x - len(res)) * ' ' + '|', end = '')
             print('')
-        '''
+        '''        
         pd.DataFrame(ans).to_csv(self.write_path + factor_name + r'/ratio.csv', index=None)
     
 if __name__ == '__main__':
     start = 20150106
     end = 20200801
     factor_path = r'/home/xiaonan/factor_wxn/factor/'
-    factor_name = 'price_vol_corr'
+    factor_name = 'trend_strength'
     # factor_name = 'market_depth_amount'
     write_path = r'/home/xiaonan/factor_wxn/SignalAnalysis/Report/'
     A = DailyReport(factor_path, write_path)
-    A.ratio(start,end,factor_name)
-    # A.distribute(start, end,factor_name)
-    # A.group_test(start, end, factor_name)
-    # A.ic_test(start, end, factor_name)
+    # A.ratio(start,end,factor_name)
+    A.distribute(start, end,factor_name)
+    A.group_test(start, end, factor_name)
+    A.ic_test(start, end, factor_name)

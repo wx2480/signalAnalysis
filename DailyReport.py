@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import seaborn as sns
+import paraCorr
 
 import sys, os
 sys.path.append('/data/stock/newSystemData/feature_base/structure/yili/db_utilise/')
@@ -37,7 +38,7 @@ class DailyReport:
         self.factor[self.factor_name] = self.get_factor_data()
     
     def distribute(self):
-        _ = self.factor[self.factor_name]['values']
+        _ = self.factor[self.factor_name]['values'].dropna()
         self.ReportFig.factorDistribute(_, self.write_path + self.factor_name + r'/')
 
 
@@ -79,27 +80,52 @@ class DailyReport:
         
         _ = group[group._group == 0].drop('_group', axis = 1).copy()
         
-        self.ReportFig.groupFig(((_ + 1)*0.997).cumprod().apply(lambda x:x-x.mean(), axis = 1), self.write_path + self.factor_name + r'/')
+        net = ((_ + 1)*0.997).cumprod()
+        self.ReportFig.groupFig(net.apply(lambda x:x-x.mean(), axis = 1), self.write_path + self.factor_name + r'/')
+        
+        longshort = net.iloc[:,0] - net.iloc[:,0]
+        if longshort.iloc[-2] < 0:
+            longshort = -longshort
+        '''
+        ratio = pd.DataFrame([])
+        for i in range(n):
+            ratio.loc[i,0] = np.power(net.iloc[-1, i], 256/net.shape[0])
+        ratio.loc['Sharpe',0] = np.power(longshort.iloc[-2], 256/longshort.shape[0]) / np.log(longshort[longshort != 0]).diff().std() / 16
+        ratio.loc['maxdrawdown',0] = np.max(1 - longshort / np.maximum.accumulate(longshort))
+        ratio.loc['Calmar',0] = np.power(longshort.iloc[-2], 256/longshort.shape[0]) / ratio.loc['maxdrawdown', 0]
+        ratio.loc['cover1',0] = self.factor[self.factor_name].dropna().shape[0]/self.factor[self.factor_name].shape[0]
+        ratio.loc['cover2',0] = self.factor[self.factor_name].dropna().drop_duplicates().shape[0]/self.factor[self.factor_name].shape[0]
+
+        x = pd.pivot_table(allData, index=['code'], columns=['date'], values=['values'])
+        _a, a = x.iloc[:,:-1], x.iloc[:,1:]
+        _a.columns = a.columns
+        ratio.loc['turnover', 0] = a.corrwith(_a, method = 'spearman').loc['values'].mean()
+
+        ratio.to_csv(self.write_path + self.factor_name + r'/ratio.csv')
+        '''
         return _
     
 
+    # def ic_test(self, start, end, trading_settlement, delay, day):
     def ic_test(self):
         def f(x):
             if self.trading_settlement == 'close_to_close':
                 inter = 'y_close_{}'.format(self.day)
             elif self.trading_settlement == 'open_to_open':
                 inter = 'y_open_{}'.format(self.day)
+            
+            beta = x.loc[:,inter].mean()
 
             x.set_index('code',inplace = True)
-            ic_0 = x.loc[:,['values']].corrwith(x.loc[:,inter], method = 'spearman').iloc[0]    # all ic
+            ic_0 = x.loc[:,['values']].corrwith(x.loc[:,inter] - beta, method = 'spearman').iloc[0]    # all ic
             common_index = x.sort_values('values').index
             length = len(common_index)
-            ic_1 = x.loc[common_index[:length//2],['values']].corrwith(x.loc[common_index[:length//2],inter], method = 'spearman').iloc[0]    # x bottom ic
-            ic_2 = x.loc[common_index[length//2:],['values']].corrwith(x.loc[common_index[length//2:],inter], method = 'spearman').iloc[0]    # x top ic
+            ic_1 = x.loc[common_index[:length//5],['values']].corrwith(x.loc[common_index[:length//5],inter] - beta, method = 'spearman').iloc[0]    # x bottom ic
+            ic_2 = x.loc[common_index[length//5:],['values']].corrwith(x.loc[common_index[length//5:],inter] - beta, method = 'spearman').iloc[0]    # x top ic
             common_index = x.sort_values(inter).index
             length = len(common_index)
-            ic_3 = x.loc[common_index[:length//2],['values']].corrwith(x.loc[common_index[:length//2],inter], method = 'spearman').iloc[0]    # y bottom ic
-            ic_4 = x.loc[common_index[length//2:],['values']].corrwith(x.loc[common_index[length//2:],inter], method = 'spearman').iloc[0]    # y top ic
+            ic_3 = x.loc[common_index[:length//5],['values']].corrwith(x.loc[common_index[:length//5],inter] - beta, method = 'spearman').iloc[0]    # y bottom ic
+            ic_4 = x.loc[common_index[length//5:],['values']].corrwith(x.loc[common_index[length//5:],inter] - beta, method = 'spearman').iloc[0]    # y top ic
 
             ans = pd.Series([ic_0, ic_1,ic_2,ic_3,ic_4])
             ans.index = ['AllIC', 'xBottomIC','xTopIC','yBottomIC','yTopIC']
@@ -109,10 +135,16 @@ class DailyReport:
         _factor = self.factor[self.factor_name].copy()
         print('hhhhhhhhhhhhhh')
         allData = pd.merge(_factor, self.ret, how = 'left', left_on=['code','date'], right_on=['code','dt'])
+        
         ic_values = allData.groupby('date').apply(f)
         ic_values = ic_values.sort_index()
         ic_values.index = ic_values.index.map(str)
-
+        '''
+        allData = allData.values
+        timeline = ts.get_trading_date(start, end)
+        for i in timeline:
+            pass
+        '''
         if os.path.exists(self.write_path + self.factor_name + r'/'):
             pass
         else:
@@ -120,30 +152,22 @@ class DailyReport:
         
         self.ReportFig.icFig(ic_values, self.write_path + self.factor_name + r'/')
         return ic_values
-
-
-
-
         
     def plot(self):
         pass
     
 
-
-
-
-
 start = 20150106
 end = 20200801
 factor_path = r'/home/xiaonan/factor_wxn/factor/'
-factor_name = 'market_depth_amount'
+factor_name = 'price_vol_corr'
 write_path = r'/home/xiaonan/factor_wxn/SignalAnalysis/Report/'
 A = DailyReport(start, end, factor_path, factor_name, write_path, delay = 0)
 
 A.preprocessing()
 A.distribute()
-# ret = A.group_test()
-# res = A.ic_test()
+ret = A.group_test()
+res = A.ic_test()
 
 
 
